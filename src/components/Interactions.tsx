@@ -6,95 +6,136 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Globe, Video, FileText, Bot, User, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Send, Globe, Video, FileText, Bot, User } from "lucide-react"
 import { toast } from "sonner"
+import { AgentSelector } from "./AgentSelector"
+import { Agent, ConversationMessage, MultipleChoiceContent } from "@/types/agent"
 
-interface DataRecord {
-  id: string
-  type: string
-  content: string
-  confidence: number
-  timestamp: string
-}
-
-interface Message {
-  id: string
-  type: 'user' | 'agent'
-  content: string
-  timestamp: string
-  data?: DataRecord[]
-}
-
-const mockMessages: Message[] = [
+const mockAgents: Agent[] = [
   {
-    id: '1',
-    type: 'agent',
-    content: 'Hello! I\'m ready to help you scrape data from websites. Please provide the website URL and instructions for what data you need.',
-    timestamp: '10:30 AM'
-  }
-]
-
-const mockDataRecords: DataRecord[] = [
-  {
-    id: '1',
-    type: 'product',
-    content: 'iPhone 15 Pro - $999 - Apple Store - In Stock',
-    confidence: 0.95,
-    timestamp: '10:35 AM'
+    id: 'agent-1',
+    name: 'E-commerce Scraper',
+    status: 'active',
+    description: 'Specialized in extracting product data from e-commerce websites',
+    totalMessages: 124,
+    successRate: 94.5,
+    lastActive: '2 minutes ago'
   },
   {
-    id: '2',
-    type: 'product',
-    content: 'Samsung Galaxy S24 - $899 - Best Buy - Limited Stock',
-    confidence: 0.88,
-    timestamp: '10:36 AM'
+    id: 'agent-2', 
+    name: 'News Crawler',
+    status: 'idle',
+    description: 'Extracts articles and content from news websites',
+    totalMessages: 67,
+    successRate: 89.2,
+    lastActive: '15 minutes ago'
   },
   {
-    id: '3',
-    type: 'product',
-    content: 'Google Pixel 8 - $699 - Google Store - Available',
-    confidence: 0.92,
-    timestamp: '10:37 AM'
+    id: 'agent-3',
+    name: 'Social Media Monitor',
+    status: 'active',
+    description: 'Monitors and extracts data from social media platforms',
+    totalMessages: 203,
+    successRate: 91.8,
+    lastActive: '1 minute ago'
   }
 ]
 
 export function Interactions() {
-  const [messages, setMessages] = useState<Message[]>(mockMessages)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Record<string, ConversationMessage[]>>({})
   const [input, setInput] = useState('')
   const [website, setWebsite] = useState('')
   const [instructions, setInstructions] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
+  const currentMessages = selectedAgent ? conversations[selectedAgent] || [] : []
+
   const handleSendMessage = async () => {
+    if (!selectedAgent) {
+      toast("Please select an agent first")
+      return
+    }
+    
     if (!input.trim() && !website.trim()) return
 
-    const userMessage: Message = {
+    const userMessage: ConversationMessage = {
       id: Date.now().toString(),
+      agentId: selectedAgent,
       type: 'user',
       content: input || `Website: ${website}\nInstructions: ${instructions}`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
 
-    setMessages(prev => [...prev, userMessage])
+    setConversations(prev => ({
+      ...prev,
+      [selectedAgent]: [...(prev[selectedAgent] || []), userMessage]
+    }))
+    
     setInput('')
+    setWebsite('')
+    setInstructions('')
     setIsLoading(true)
 
-    // Simulate AI agent response
+    // Simulate AI agent response with multiple choice format
     setTimeout(() => {
-      const agentMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'agent',
-        content: 'I\'ve started analyzing the website. Here are the data records I found:',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        data: mockDataRecords
+      const mockChoices: MultipleChoiceContent = {
+        choice_1: 'Extract product titles and prices',
+        choice_2: 'Focus on customer reviews and ratings', 
+        choice_3: 'Collect inventory and availability data',
+        choice_4: 'Get product specifications and features'
       }
-      setMessages(prev => [...prev, agentMessage])
+
+      const agentMessage: ConversationMessage = {
+        id: (Date.now() + 1).toString(),
+        agentId: selectedAgent,
+        type: 'agent',
+        content: 'I\'ve analyzed the website. Please choose what type of data you\'d like me to focus on:',
+        choices: mockChoices,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+      
+      setConversations(prev => ({
+        ...prev,
+        [selectedAgent]: [...(prev[selectedAgent] || []), agentMessage]
+      }))
       setIsLoading(false)
     }, 2000)
   }
 
-  const handleDataFeedback = (recordId: string, feedback: 'good' | 'bad') => {
-    toast(`Feedback recorded: ${feedback === 'good' ? 'Good' : 'Needs improvement'}`)
+  const handleChoiceSelect = (messageId: string, choice: string) => {
+    if (!selectedAgent) return
+
+    setConversations(prev => ({
+      ...prev,
+      [selectedAgent]: prev[selectedAgent]?.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, selectedChoice: choice }
+          : msg
+      ) || []
+    }))
+
+    toast(`Selected: ${choice}`)
+  }
+
+  const handleAgentSelect = (agentId: string) => {
+    setSelectedAgent(agentId)
+    
+    // Initialize conversation if it doesn't exist
+    if (!conversations[agentId]) {
+      const welcomeMessage: ConversationMessage = {
+        id: 'welcome-' + agentId,
+        agentId,
+        type: 'agent',
+        content: `Hello! I'm ${mockAgents.find(a => a.id === agentId)?.name}. I'm ready to help you scrape data. Please provide the website URL and instructions.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+      
+      setConversations(prev => ({
+        ...prev,
+        [agentId]: [welcomeMessage]
+      }))
+    }
   }
 
   return (
@@ -110,11 +151,18 @@ export function Interactions() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bot className="h-5 w-5" />
-              Agent Input
+              Agent Control
             </CardTitle>
-            <CardDescription>Provide instructions and resources for your AI agent</CardDescription>
+            <CardDescription>Select your AI agent and provide instructions</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <AgentSelector 
+              agents={mockAgents}
+              selectedAgent={selectedAgent}
+              onAgentSelect={handleAgentSelect}
+            />
+
+            <Separator />
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <Globe className="h-4 w-4" />
@@ -151,8 +199,12 @@ export function Interactions() {
               />
             </div>
 
-            <Button onClick={handleSendMessage} className="w-full" disabled={isLoading}>
-              {isLoading ? 'Processing...' : 'Start Agent'}
+            <Button 
+              onClick={handleSendMessage} 
+              className="w-full" 
+              disabled={isLoading || !selectedAgent}
+            >
+              {isLoading ? 'Processing...' : 'Send Message'}
             </Button>
           </CardContent>
         </Card>
@@ -161,12 +213,17 @@ export function Interactions() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Conversation</CardTitle>
-            <CardDescription>Real-time communication with your AI agent</CardDescription>
+            <CardDescription>
+              {selectedAgent 
+                ? `Chatting with ${mockAgents.find(a => a.id === selectedAgent)?.name}`
+                : 'Select an agent to start chatting'
+              }
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col h-[500px]">
             <ScrollArea className="flex-1 pr-4">
               <div className="space-y-4">
-                {messages.map((message) => (
+                {currentMessages.map((message) => (
                   <div key={message.id} className="space-y-2">
                     <div className={`flex items-start gap-3 ${message.type === 'user' ? 'flex-row-reverse' : ''}`}>
                       <div className={`p-2 rounded-full ${message.type === 'user' ? 'bg-primary' : 'bg-muted'}`}>
@@ -188,42 +245,29 @@ export function Interactions() {
                       </div>
                     </div>
 
-                    {/* Data Records */}
-                    {message.data && (
+                    {/* Multiple Choice Options */}
+                    {message.choices && (
                       <div className="ml-12 space-y-2">
                         <Separator />
-                        <div className="text-sm font-medium">Data Records Found:</div>
-                        {message.data.map((record) => (
-                          <div key={record.id} className="p-3 border rounded-lg bg-card">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="outline">{record.type}</Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    Confidence: {(record.confidence * 100).toFixed(0)}%
-                                  </span>
+                        <div className="text-sm font-medium">Choose an option:</div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {Object.entries(message.choices).map(([choiceKey, choiceText]) => (
+                            <Button
+                              key={choiceKey}
+                              variant={message.selectedChoice === choiceKey ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handleChoiceSelect(message.id, choiceKey)}
+                              className="justify-start text-left h-auto p-3"
+                            >
+                              <div>
+                                <div className="font-medium text-xs text-muted-foreground mb-1">
+                                  {choiceKey.replace('_', ' ').toUpperCase()}
                                 </div>
-                                <p className="text-sm">{record.content}</p>
+                                <div className="text-sm">{choiceText}</div>
                               </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDataFeedback(record.id, 'good')}
-                                >
-                                  <ThumbsUp className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDataFeedback(record.id, 'bad')}
-                                >
-                                  <ThumbsDown className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -250,12 +294,13 @@ export function Interactions() {
 
             <div className="flex gap-2 pt-4 border-t">
               <Input
-                placeholder="Type your message..."
+                placeholder={selectedAgent ? "Type your message..." : "Select an agent first..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                disabled={!selectedAgent}
               />
-              <Button size="sm" onClick={handleSendMessage}>
+              <Button size="sm" onClick={handleSendMessage} disabled={!selectedAgent}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>
